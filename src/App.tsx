@@ -9,7 +9,7 @@ import ChatPanel from "./components/Chat/ChatPanel";
 import { Bot } from "lucide-react";
 
 export default function App() {
-  const { loadSessions, loadModels, loadHardware, activeSession, projectPath, loadProjectTree, projectTree } = useStore();
+  const { loadSessions, loadModels, loadHardware, activeSession, projectPath, loadProjectTree } = useStore();
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
@@ -18,18 +18,19 @@ export default function App() {
     loadHardware();
   }, []);
 
-  // Restore persisted project tree
+  // Restore project tree once on mount if path is persisted
   useEffect(() => {
-    if (projectPath && projectTree.length === 0) {
-      loadProjectTree(projectPath);
-    }
-  }, [projectPath]);
+    if (projectPath) loadProjectTree(projectPath);
+  }, []); // intentionally empty — only on mount
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{background:"#13131f", color:"#d4d6f0", fontFamily:"'Inter', system-ui, sans-serif"}}>
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{ background: "#13131f", color: "#d4d6f0", fontFamily: "'Inter', system-ui, sans-serif" }}
+    >
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {!activeSession ? (
             <WelcomeScreen />
           ) : (
@@ -44,21 +45,20 @@ export default function App() {
         )}
       </div>
 
-      {/* StatusBar con botón para abrir/cerrar chat */}
       {activeSession && (
         <div
-          className="flex items-center justify-between flex-shrink-0 select-none"
-          style={{height:22, background:"#0f0f1a", borderTop:"1px solid #1e1e35"}}
+          className="flex items-center flex-shrink-0 select-none"
+          style={{ height: 22, background: "#0f0f1a", borderTop: "1px solid #1e1e35" }}
         >
           <StatusBar />
           <button
             onClick={() => setChatOpen(o => !o)}
-            className="flex items-center gap-1.5 px-3 h-full transition-all"
-            style={{color: chatOpen ? "#818cf8" : "#3a3a5c", borderLeft: "1px solid #1e1e35"}}
-            title="Abrir / cerrar chat IA"
+            className="flex items-center gap-1.5 px-3 h-full transition-all flex-shrink-0"
+            style={{ color: chatOpen ? "#818cf8" : "#3a3a5c", borderLeft: "1px solid #1e1e35" }}
+            title="Abrir / cerrar chat IA (Ctrl+I)"
           >
-            <Bot size={11}/>
-            <span style={{fontSize:10}}>IA</span>
+            <Bot size={11} />
+            <span style={{ fontSize: 10 }}>IA</span>
           </button>
         </div>
       )}

@@ -1,59 +1,58 @@
 import Editor from "@monaco-editor/react";
 import { useStore } from "../../store";
 import { FileCode } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 
-const LANG_MAP: Record<string,string> = {
-  php:"php", js:"javascript", ts:"typescript", tsx:"typescriptreact", jsx:"javascriptreact",
-  py:"python", rs:"rust", sql:"sql", css:"css", html:"html", json:"json", md:"markdown",
-  sh:"shell", yaml:"yaml", yml:"yaml", toml:"ini", vue:"html", svelte:"html",
-  txt:"plaintext", xml:"xml", c:"c", cpp:"cpp", cs:"csharp", go:"go", rb:"ruby",
+const LANG_MAP: Record<string, string> = {
+  php: "php", js: "javascript", ts: "typescript", tsx: "typescriptreact", jsx: "javascriptreact",
+  py: "python", rs: "rust", sql: "sql", css: "css", html: "html", json: "json", md: "markdown",
+  sh: "shell", yaml: "yaml", yml: "yaml", toml: "ini", vue: "html", svelte: "html",
+  txt: "plaintext", xml: "xml", c: "c", cpp: "cpp", cs: "csharp", go: "go", rb: "ruby",
 };
 
 export default function EditorPanel() {
-  const { activeFile, fileContent, setFileContent, saveFile, setCursor } = useStore();
-  const [unsaved, setUnsaved] = useState(false);
+  const { activeFile, fileContent, setFileContent, saveFile, setCursor, markUnsaved, markSaved, unsavedFiles } = useStore();
 
   const ext = activeFile?.split(".").pop()?.toLowerCase() || "";
   const lang = LANG_MAP[ext] || "plaintext";
   const fileName = activeFile?.split("/").pop() || "";
-
-  useEffect(() => { setUnsaved(false); }, [activeFile]);
+  const isUnsaved = activeFile ? unsavedFiles.has(activeFile) : false;
 
   const handleSave = useCallback(async () => {
     await saveFile();
-    setUnsaved(false);
-  }, [saveFile]);
+    if (activeFile) markSaved(activeFile);
+  }, [saveFile, activeFile, markSaved]);
 
   if (!activeFile) return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{background:"#13131f"}}>
-      <FileCode size={52} style={{color:"#2a2a45"}}/>
+    <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{ background: "#13131f" }}>
+      <FileCode size={52} style={{ color: "#2a2a45" }} />
       <div className="text-center">
-        <p className="text-sm" style={{color:"#4a4a6a"}}>Ningún archivo abierto</p>
-        <p className="text-xs mt-1" style={{color:"#2e2e4a"}}>Selecciona un archivo del explorador</p>
+        <p className="text-sm" style={{ color: "#4a4a6a" }}>Ningún archivo abierto</p>
+        <p className="text-xs mt-1" style={{ color: "#2e2e4a" }}>Selecciona un archivo del explorador</p>
       </div>
     </div>
   );
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden" style={{background:"#13131f"}}>
-      <div className="flex items-center justify-between px-4 py-1 flex-shrink-0" style={{background:"#13131f", borderBottom:"1px solid #1e1e35"}}>
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "#13131f" }}>
+      {/* Breadcrumb */}
+      <div className="flex items-center justify-between px-4 py-1 flex-shrink-0" style={{ background: "#13131f", borderBottom: "1px solid #1e1e35" }}>
         <div className="flex items-center gap-1 text-xs font-mono min-w-0 overflow-hidden">
           {activeFile.split("/").slice(-3, -1).map((part, i) => (
             <span key={i} className="flex items-center gap-1">
-              <span style={{color:"#2e2e4a"}}>{part}</span>
-              <span style={{color:"#1e1e35"}}>›</span>
+              <span style={{ color: "#2e2e4a" }}>{part}</span>
+              <span style={{ color: "#1e1e35" }}>›</span>
             </span>
           ))}
-          <span style={{color:"#c7d2fe", fontWeight:600}}>{fileName}</span>
-          {unsaved && <span style={{color:"#f9e2af", marginLeft:4}}>●</span>}
+          <span style={{ color: "#c7d2fe", fontWeight: 600 }}>{fileName}</span>
+          {isUnsaved && <span style={{ color: "#f9e2af", marginLeft: 4 }} title="Cambios sin guardar">●</span>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded" style={{background:"#1e1e35",color:"#4a4a6a"}}>{lang}</span>
+          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded" style={{ background: "#1e1e35", color: "#4a4a6a" }}>{lang}</span>
           <button
             onClick={handleSave}
             className="text-xs px-2.5 py-0.5 rounded font-medium transition-all"
-            style={unsaved ? {background:"#7c3aed", color:"#fff"} : {background:"#1e1e35", color:"#4a4a6a"}}
+            style={isUnsaved ? { background: "#7c3aed", color: "#fff" } : { background: "#1e1e35", color: "#4a4a6a" }}
           >
             Guardar
           </button>
@@ -64,10 +63,12 @@ export default function EditorPanel() {
         <Editor
           value={fileContent}
           language={lang}
-          onChange={v => { setFileContent(v || ""); setUnsaved(true); }}
+          onChange={v => {
+            setFileContent(v || "");
+            if (activeFile) markUnsaved(activeFile);
+          }}
           onMount={(editor, monaco) => {
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
-            // Track cursor position → store → StatusBar
             editor.onDidChangeCursorPosition(e => {
               setCursor(e.position.lineNumber, e.position.column);
             });

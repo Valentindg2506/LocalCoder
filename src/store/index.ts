@@ -5,15 +5,30 @@ import type { Session, Message, OllamaModel, HardwareInfo, FileNode } from "../t
 
 const PROJECT_KEY = "lc_project";
 const SESSION_KEY = "lc_session_id";
+const TABS_KEY = "lc_tabs";
+const ACTIVE_FILE_KEY = "lc_active_file";
+
+// Safe localStorage reads (guards against Tauri WebView timing issues)
+function lsGet(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function lsSet(key: string, val: string) {
+  try { localStorage.setItem(key, val); } catch {}
+}
+function lsDel(key: string) {
+  try { localStorage.removeItem(key); } catch {}
+}
 
 interface AppStore {
   sessions: Session[];
   activeSession: Session | null;
   messages: Message[];
   models: OllamaModel[];
+  modelsError: string | null;
   hardware: HardwareInfo | null;
   activeFile: string | null;
   fileContent: string;
+  unsavedFiles: Set<string>;
   projectPath: string | null;
   projectTree: FileNode[];
   isStreaming: boolean;
@@ -33,55 +48,78 @@ interface AppStore {
   closeTab: (path: string) => void;
   saveFile: () => Promise<void>;
   setFileContent: (c: string) => void;
+  markUnsaved: (path: string) => void;
+  markSaved: (path: string) => void;
   setProjectPath: (p: string) => void;
   loadProjectTree: (path: string) => Promise<void>;
   setCursor: (line: number, col: number) => void;
   appendStream: (token: string) => void;
 }
 
-const savedProject = localStorage.getItem(PROJECT_KEY);
-const savedSessionId = localStorage.getItem(SESSION_KEY);
-
 export const useStore = create<AppStore>((set, get) => ({
-  sessions: [], activeSession: null, messages: [], models: [],
-  hardware: null, activeFile: null, fileContent: "",
-  projectPath: savedProject || null,
+  sessions: [],
+  activeSession: null,
+  messages: [],
+  models: [],
+  modelsError: null,
+  hardware: null,
+  activeFile: null,
+  fileContent: "",
+  unsavedFiles: new Set(),
+  projectPath: lsGet(PROJECT_KEY),
   projectTree: [],
-  isStreaming: false, streamBuffer: "",
+  isStreaming: false,
+  streamBuffer: "",
   openTabs: [],
-  cursorLine: 1, cursorCol: 1,
+  cursorLine: 1,
+  cursorCol: 1,
 
   loadSessions: async () => {
     const sessions = await invoke<Session[]>("get_sessions");
-    // Restore last active session
     let activeSession: Session | null = null;
     let messages: Message[] = [];
-    if (savedSessionId) {
-      const found = sessions.find(s => s.id === savedSessionId);
+    const savedId = lsGet(SESSION_KEY);
+    if (savedId) {
+      const found = sessions.find(s => s.id === savedId);
       if (found) {
         activeSession = found;
         messages = await invoke<Message[]>("get_messages", { sessionId: found.id });
       }
     }
-    set({ sessions, activeSession, messages });
+    // Restore open tabs and active file
+    const savedTabs = lsGet(TABS_KEY);
+    const savedFile = lsGet(ACTIVE_FILE_KEY);
+    const openTabs: string[] = savedTabs ? JSON.parse(savedTabs) : [];
+    let fileContent = "";
+    let activeFile: string | null = null;
+    if (savedFile && openTabs.includes(savedFile)) {
+      try {
+        fileContent = await invoke<string>("read_file", { path: savedFile });
+        activeFile = savedFile;
+      } catch {
+        // file may have been deleted/moved
+        lsDel(ACTIVE_FILE_KEY);
+      }
+    }
+    set({ sessions, activeSession, messages, openTabs, activeFile, fileContent });
   },
 
   createSession: async (name, projectPath, model = "llama3.1:8b") => {
     const session = await invoke<Session>("create_session", { name, projectPath, model });
-    localStorage.setItem(SESSION_KEY, session.id);
-    set(s => ({ sessions: [session, ...s.sessions], activeSession: session, messages: [] }));
+    lsSet(SESSION_KEY, session.id);
+    set(s => ({ sessions: [session, ...s.sessions], activeSession: session, messages: [], openTabs: [], activeFile: null, fileContent: "" }));
     return session;
   },
 
   setActiveSession: async (session) => {
     const messages = await invoke<Message[]>("get_messages", { sessionId: session.id });
-    localStorage.setItem(SESSION_KEY, session.id);
+    lsSet(SESSION_KEY, session.id);
     set({ activeSession: session, messages });
   },
 
   deleteSession: async (id) => {
     await invoke("delete_session", { id });
-    if (localStorage.getItem(SESSION_KEY) === id) localStorage.removeItem(SESSION_KEY);
+    if (lsGet(SESSION_KEY) === id) lsDel(SESSION_KEY);
     set(s => ({
       sessions: s.sessions.filter(x => x.id !== id),
       activeSession: s.activeSession?.id === id ? null : s.activeSession,
@@ -105,20 +143,28 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   loadModels: async () => {
-    try { set({ models: await invoke<OllamaModel[]>("list_models") }); }
-    catch { set({ models: [] }); }
+    try {
+      const models = await invoke<OllamaModel[]>("list_models");
+      set({ models, modelsError: null });
+    } catch (e: any) {
+      set({ models: [], modelsError: e?.message || "No se pudo conectar con Ollama" });
+    }
   },
 
   loadHardware: async () => set({ hardware: await invoke<HardwareInfo>("get_hardware_info") }),
 
   setActiveFile: async (path) => {
-    const content = await invoke<string>("read_file", { path });
-    set(s => ({
-      activeFile: path,
-      fileContent: content,
-      openTabs: s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path],
-      cursorLine: 1, cursorCol: 1,
-    }));
+    try {
+      const content = await invoke<string>("read_file", { path });
+      set(s => {
+        const openTabs = s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path];
+        lsSet(TABS_KEY, JSON.stringify(openTabs));
+        lsSet(ACTIVE_FILE_KEY, path);
+        return { activeFile: path, fileContent: content, openTabs, cursorLine: 1, cursorCol: 1 };
+      });
+    } catch (e: any) {
+      console.error("Error al abrir archivo:", e);
+    }
   },
 
   closeTab: (path) => {
@@ -127,26 +173,37 @@ export const useStore = create<AppStore>((set, get) => ({
       const newActive = s.activeFile === path
         ? (tabs.length > 0 ? tabs[tabs.length - 1] : null)
         : s.activeFile;
-      return { openTabs: tabs, activeFile: newActive };
+      lsSet(TABS_KEY, JSON.stringify(tabs));
+      if (newActive) lsSet(ACTIVE_FILE_KEY, newActive);
+      else lsDel(ACTIVE_FILE_KEY);
+      const unsaved = new Set(s.unsavedFiles);
+      unsaved.delete(path);
+      return { openTabs: tabs, activeFile: newActive, unsavedFiles: unsaved };
     });
   },
 
   saveFile: async () => {
     const { activeFile, fileContent } = get();
-    if (activeFile) await invoke("write_file", { path: activeFile, content: fileContent });
+    if (activeFile) {
+      await invoke("write_file", { path: activeFile, content: fileContent });
+      get().markSaved(activeFile);
+    }
   },
 
   setFileContent: c => set({ fileContent: c }),
 
+  markUnsaved: (path) => set(s => { const u = new Set(s.unsavedFiles); u.add(path); return { unsavedFiles: u }; }),
+  markSaved: (path) => set(s => { const u = new Set(s.unsavedFiles); u.delete(path); return { unsavedFiles: u }; }),
+
   setProjectPath: (p) => {
-    localStorage.setItem(PROJECT_KEY, p);
+    lsSet(PROJECT_KEY, p);
     set({ projectPath: p });
   },
 
   loadProjectTree: async (path) => {
     const nodes = await invoke<FileNode[]>("list_directory", { path });
+    lsSet(PROJECT_KEY, path);
     set({ projectTree: nodes, projectPath: path });
-    localStorage.setItem(PROJECT_KEY, path);
   },
 
   setCursor: (line, col) => set({ cursorLine: line, cursorCol: col }),

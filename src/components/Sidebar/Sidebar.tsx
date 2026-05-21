@@ -14,13 +14,13 @@ export default function Sidebar() {
       style={{ width: 220, background: "#0f0f1a", borderRight: "1px solid #1e1e35" }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 py-2.5 flex-shrink-0" style={{borderBottom:"1px solid #1e1e35"}}>
-        <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{background:"linear-gradient(135deg,#7c3aed,#3b82f6)"}}>
-          <Zap size={11} color="#fff"/>
+      <div className="flex items-center gap-2 px-4 py-2.5 flex-shrink-0" style={{ borderBottom: "1px solid #1e1e35" }}>
+        <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg,#7c3aed,#3b82f6)" }}>
+          <Zap size={11} color="#fff" />
         </div>
-        <span className="text-xs font-bold tracking-wide" style={{color:"#d4d6f0"}}>LocalCoder</span>
+        <span className="text-xs font-bold tracking-wide" style={{ color: "#d4d6f0" }}>LocalCoder</span>
         {activeSession && (
-          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded font-mono truncate max-w-[80px]" style={{background:"#1e1e35", color:"#818cf8"}}>
+          <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded font-mono truncate max-w-[80px]" style={{ background: "#1e1e35", color: "#818cf8" }}>
             {activeSession.model.split(":")[0]}
           </span>
         )}
@@ -31,24 +31,24 @@ export default function Sidebar() {
         <button
           onClick={() => setSessionsOpen(o => !o)}
           className="flex items-center gap-1.5 w-full px-3 py-1.5 transition-colors hover:bg-white/5"
-          style={{color:"#3a3a5c"}}
+          style={{ color: "#3a3a5c" }}
         >
-          {sessionsOpen ? <ChevronDown size={10}/> : <ChevronRight size={10}/>}
+          {sessionsOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           <span className="text-[10px] font-semibold uppercase tracking-widest">Sesiones</span>
           <button
             onClick={e => { e.stopPropagation(); createSession("Nueva sesión", undefined, models[0]?.name || "llama3.1:8b"); }}
             className="ml-auto p-0.5 rounded hover:opacity-100 opacity-50 transition-opacity"
-            style={{color:"#818cf8"}}
+            style={{ color: "#818cf8" }}
             title="Nueva sesión"
           >
-            <Plus size={11}/>
+            <Plus size={11} />
           </button>
         </button>
 
         {sessionsOpen && (
-          <div className="overflow-y-auto" style={{maxHeight:150}}>
+          <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
             {sessions.length === 0 && (
-              <p className="text-[11px] px-4 py-2 italic" style={{color:"#2e2e4a"}}>Sin sesiones</p>
+              <p className="text-[11px] px-4 py-2 italic" style={{ color: "#2e2e4a" }}>Sin sesiones</p>
             )}
             {sessions.map(s => (
               <div
@@ -60,14 +60,14 @@ export default function Sidebar() {
                   background: activeSession?.id === s.id ? "#1a1a2e" : undefined,
                 }}
               >
-                <MessageSquare size={10} style={{color: activeSession?.id===s.id ? "#818cf8" : "#2e2e4a", flexShrink:0}}/>
-                <span className="text-xs truncate flex-1" style={{color: activeSession?.id===s.id ? "#c7d2fe" : "#6b6b8a"}}>{s.name}</span>
+                <MessageSquare size={10} style={{ color: activeSession?.id === s.id ? "#818cf8" : "#2e2e4a", flexShrink: 0 }} />
+                <span className="text-xs truncate flex-1" style={{ color: activeSession?.id === s.id ? "#c7d2fe" : "#6b6b8a" }}>{s.name}</span>
                 <button
                   onClick={e => { e.stopPropagation(); deleteSession(s.id); }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{color:"#f87171"}}
+                  style={{ color: "#f87171" }}
                 >
-                  <Trash2 size={9}/>
+                  <Trash2 size={9} />
                 </button>
               </div>
             ))}
@@ -75,16 +75,16 @@ export default function Sidebar() {
         )}
       </div>
 
-      <div style={{height:1, background:"#1e1e35", margin:"2px 12px"}}/>
+      <div style={{ height: 1, background: "#1e1e35", margin: "2px 12px" }} />
 
       {/* Explorer */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <button
           onClick={() => setExplorerOpen(o => !o)}
           className="flex items-center gap-1.5 w-full px-3 py-1.5 flex-shrink-0 transition-colors hover:bg-white/5"
-          style={{color:"#3a3a5c"}}
+          style={{ color: "#3a3a5c" }}
         >
-          {explorerOpen ? <ChevronDown size={10}/> : <ChevronRight size={10}/>}
+          {explorerOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           <span className="text-[10px] font-semibold uppercase tracking-widest">Explorador</span>
         </button>
         {explorerOpen && (
