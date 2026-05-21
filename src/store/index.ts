@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Session, Message, OllamaModel, HardwareInfo } from "../types";
+import type { Session, Message, OllamaModel, HardwareInfo, FileNode } from "../types";
+
+const STORAGE_KEY = "lc_project";
 
 interface AppStore {
   sessions: Session[];
@@ -12,6 +14,7 @@ interface AppStore {
   activeFile: string | null;
   fileContent: string;
   projectPath: string | null;
+  projectTree: FileNode[];
   isStreaming: boolean;
   streamBuffer: string;
   openTabs: string[];
@@ -28,13 +31,19 @@ interface AppStore {
   saveFile: () => Promise<void>;
   setFileContent: (c: string) => void;
   setProjectPath: (p: string) => void;
+  loadProjectTree: (path: string) => Promise<void>;
   appendStream: (token: string) => void;
 }
+
+// Restore persisted project path
+const savedProject = localStorage.getItem(STORAGE_KEY);
 
 export const useStore = create<AppStore>((set, get) => ({
   sessions: [], activeSession: null, messages: [], models: [],
   hardware: null, activeFile: null, fileContent: "",
-  projectPath: null, isStreaming: false, streamBuffer: "",
+  projectPath: savedProject || null,
+  projectTree: [],
+  isStreaming: false, streamBuffer: "",
   openTabs: [],
 
   loadSessions: async () => set({ sessions: await invoke<Session[]>("get_sessions") }),
@@ -106,6 +115,17 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   setFileContent: c => set({ fileContent: c }),
-  setProjectPath: p => set({ projectPath: p }),
+
+  setProjectPath: (p) => {
+    localStorage.setItem(STORAGE_KEY, p);
+    set({ projectPath: p });
+  },
+
+  loadProjectTree: async (path) => {
+    const nodes = await invoke<FileNode[]>("list_directory", { path });
+    set({ projectTree: nodes, projectPath: path });
+    localStorage.setItem(STORAGE_KEY, path);
+  },
+
   appendStream: token => set(s => ({ streamBuffer: s.streamBuffer + token })),
 }));

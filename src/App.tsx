@@ -16,8 +16,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{background:"#0d0d14", color:"#e2e4f0", fontFamily:"'Inter', system-ui, sans-serif"}}>
-      {/* Main layout */}
+    <div className="flex flex-col h-screen overflow-hidden" style={{background:"#13131f", color:"#d4d6f0", fontFamily:"'Inter', system-ui, sans-serif"}}>
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden relative">
