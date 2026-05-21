@@ -1,7 +1,7 @@
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { useStore } from "../../store";
 import { FileCode } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 const LANG_MAP: Record<string, string> = {
@@ -12,7 +12,18 @@ const LANG_MAP: Record<string, string> = {
 };
 
 export default function EditorPanel() {
-  const { activeFile, fileContent, setFileContent, saveFile, setCursor, markUnsaved, markSaved, unsavedFiles, activeSession, setAiCompleting } = useStore();
+  const store = useStore();
+  const {
+    activeFile, fileContent, setFileContent, saveFile,
+    setCursor, markUnsaved, markSaved, unsavedFiles,
+    setAiCompleting,
+  } = store;
+
+  // Keep a ref to the latest store snapshot so the Monaco provider
+  // never closes over a stale activeSession or lang value
+  const storeRef = useRef(store);
+  useEffect(() => { storeRef.current = store; });
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completionDisposableRef = useRef<any>(null);
 
@@ -26,12 +37,21 @@ export default function EditorPanel() {
     if (activeFile) markSaved(activeFile);
   }, [saveFile, activeFile, markSaved]);
 
+  // Dispose inline provider and cancel debounce when file changes
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        setAiCompleting(false);
+      }
+    };
+  }, [activeFile]);
+
   const handleMount: OnMount = (editor, monaco) => {
-    // --- Keybindings ---
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
     editor.onDidChangeCursorPosition(e => setCursor(e.position.lineNumber, e.position.column));
 
-    // --- Theme ---
     monaco.editor.defineTheme("lc", {
       base: "vs-dark", inherit: true,
       rules: [
@@ -61,17 +81,19 @@ export default function EditorPanel() {
         "list.hoverBackground": "#17172a",
         "list.activeSelectionBackground": "#1e1e35", "list.activeSelectionForeground": "#c7d2fe",
         "focusBorder": "#7c3aed",
-        // Ghost text (inline completion) color
         "editorGhostText.foreground": "#4a4a7a",
       }
     });
     monaco.editor.setTheme("lc");
 
-    // --- AI Inline Completions ---
-    if (completionDisposableRef.current) completionDisposableRef.current.dispose();
+    // Dispose previous provider before registering a new one
+    if (completionDisposableRef.current) {
+      completionDisposableRef.current.dispose();
+      completionDisposableRef.current = null;
+    }
 
     completionDisposableRef.current = monaco.languages.registerInlineCompletionsProvider(
-      { pattern: "**" },  // all files
+      { pattern: "**" },
       {
         provideInlineCompletions: async (model, position) => {
           const fullText = model.getValue();
@@ -79,25 +101,30 @@ export default function EditorPanel() {
           const prefix = fullText.slice(0, offset);
           const suffix = fullText.slice(offset);
 
-          // Don’t trigger on whitespace-only prefix change
           const lastLine = prefix.split("\n").pop() || "";
           if (lastLine.trim().length < 2) return { items: [] };
 
-          // Debounce: cancel previous pending request
+          // Cancel pending debounce
           if (debounceRef.current) clearTimeout(debounceRef.current);
 
           return new Promise(resolve => {
             debounceRef.current = setTimeout(async () => {
+              debounceRef.current = null;
               try {
+                // Read from ref — always up-to-date, no stale closure
+                const { activeSession } = storeRef.current;
+                const currentLang = storeRef.current.activeFile?.split(".").pop()?.toLowerCase() || "";
+                const langId = LANG_MAP[currentLang] || "plaintext";
                 const modelName = activeSession?.model || "llama3.1:8b";
-                setAiCompleting(true);
+
+                storeRef.current.setAiCompleting(true);
                 const completion = await invoke<string>("complete_code", {
                   model: modelName,
                   prefix,
                   suffix,
-                  language: lang,
+                  language: langId,
                 });
-                setAiCompleting(false);
+                storeRef.current.setAiCompleting(false);
 
                 if (!completion || completion.trim().length === 0) {
                   resolve({ items: [] });
@@ -116,10 +143,10 @@ export default function EditorPanel() {
                   }],
                 });
               } catch {
-                setAiCompleting(false);
+                storeRef.current.setAiCompleting(false);
                 resolve({ items: [] });
               }
-            }, 420); // 420ms debounce
+            }, 420);
           });
         },
         freeInlineCompletions: () => {},
@@ -161,7 +188,6 @@ export default function EditorPanel() {
           </button>
         </div>
       </div>
-
       <div className="flex-1 overflow-hidden">
         <Editor
           value={fileContent}
@@ -187,7 +213,6 @@ export default function EditorPanel() {
             tabSize: 2,
             insertSpaces: true,
             formatOnPaste: true,
-            // Inline completions
             inlineSuggest: { enabled: true, mode: "prefix" },
             suggest: { preview: true },
           }}
