@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Cpu, HardDrive, Plus, FolderOpen, Download, CheckCircle } from "lucide-react";
 import type { ModelRecommendation } from "../types";
 
@@ -8,7 +9,7 @@ export default function WelcomeScreen() {
   const { hardware, models, loadModels, createSession, setProjectPath } = useStore();
   const [recommendations, setRecommendations] = useState<ModelRecommendation[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
-  const [sessionName, setSessionName] = useState("Nueva sesión");
+  const [sessionName, setSessionName] = useState("Nueva sesi\u00f3n");
   const [pulling, setPulling] = useState<string|null>(null);
   const [pullProgress, setPullProgress] = useState("");
 
@@ -34,8 +35,7 @@ export default function WelcomeScreen() {
   };
 
   const handleOpenProject = async () => {
-    const { open } = await import("@tauri-apps/api/dialog");
-    const selected = await open({ directory:true, title:"Abrir proyecto" });
+    const selected = await open({ directory: true, title: "Abrir proyecto" });
     if (typeof selected === "string") {
       setProjectPath(selected);
       const name = selected.split("/").pop() || "Proyecto";
@@ -49,17 +49,17 @@ export default function WelcomeScreen() {
       <div className="w-full max-w-2xl space-y-6">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-[#89b4fa] mb-1">LocalCoder</h1>
-          <p className="text-[#6c7086] text-sm">IDE con IA 100% local · Sin nube · Sin límites</p>
+          <p className="text-[#6c7086] text-sm">IDE con IA 100% local &middot; Sin nube &middot; Sin l&iacute;mites</p>
         </div>
         {hardware && (
           <div className="bg-[#181825] rounded-xl p-4 grid grid-cols-2 gap-3 border border-[#313244]">
             <div className="flex items-center gap-3">
               <Cpu size={18} className="text-[#89b4fa]"/>
-              <div><p className="text-xs text-[#6c7086]">CPU</p><p className="text-sm truncate">{hardware.cpu_name} ({hardware.cpu_cores} núcleos)</p></div>
+              <div><p className="text-xs text-[#6c7086]">CPU</p><p className="text-sm truncate">{hardware.cpu_name} ({hardware.cpu_cores} n&uacute;cleos)</p></div>
             </div>
             <div className="flex items-center gap-3">
               <HardDrive size={18} className="text-[#89b4fa]"/>
-              <div><p className="text-xs text-[#6c7086]">RAM</p><p className="text-sm">{hardware.total_ram_gb} GB total · {hardware.available_ram_gb} GB libre</p></div>
+              <div><p className="text-xs text-[#6c7086]">RAM</p><p className="text-sm">{hardware.total_ram_gb} GB total &middot; {hardware.available_ram_gb} GB libre</p></div>
             </div>
           </div>
         )}
@@ -107,14 +107,14 @@ export default function WelcomeScreen() {
           </div>
         </div>
         <div className="flex gap-3">
-          <input value={sessionName} onChange={e=>setSessionName(e.target.value)} placeholder="Nombre de la sesión"
+          <input value={sessionName} onChange={e=>setSessionName(e.target.value)} placeholder="Nombre de la sesi\u00f3n"
             className="flex-1 bg-[#181825] border border-[#313244] rounded-lg px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-[#89b4fa]"/>
           <button onClick={handleOpenProject} className="flex items-center gap-2 bg-[#313244] hover:bg-[#45475a] px-4 py-3 rounded-lg text-sm transition-colors">
             <FolderOpen size={15}/> Abrir proyecto
           </button>
           <button onClick={handleCreate} disabled={!selectedModel}
             className="flex items-center gap-2 bg-[#89b4fa] text-[#1e1e2e] hover:opacity-90 px-4 py-3 rounded-lg text-sm font-medium disabled:opacity-40">
-            <Plus size={15}/> Nueva sesión
+            <Plus size={15}/> Nueva sesi\u00f3n
           </button>
         </div>
       </div>

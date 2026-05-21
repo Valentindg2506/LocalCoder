@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Session, Message, OllamaModel, HardwareInfo } from "../types";
 
 interface AppStore {
@@ -54,7 +55,6 @@ export const useStore = create<AppStore>((set,get) => ({
     const userMsg = await invoke<Message>("add_message", { sessionId:activeSession.id, role:"user", content });
     set(s => ({ messages:[...s.messages, userMsg], isStreaming:true, streamBuffer:"" }));
     const chatMessages = [...messages, userMsg].map(m => ({ role:m.role, content:m.content }));
-    const { listen } = await import("@tauri-apps/api/event");
     const ul1 = await listen<string>(`chat_token_${activeSession.id}`, e => get().appendStream(e.payload));
     const ul2 = await listen<string>(`chat_done_${activeSession.id}`, async e => {
       ul1(); ul2();
