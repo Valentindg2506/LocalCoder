@@ -12,18 +12,18 @@ const EXT_COLOR: Record<string,string> = {
 };
 
 function TreeNode({ node, depth=0 }: { node:FileNode; depth?:number }) {
-  const [open: openState, setOpen] = useState(depth < 2);
+  const [isOpen, setIsOpen] = useState(depth < 2);
   const { setActiveFile, activeFile } = useStore();
   const color = EXT_COLOR[node.extension] || "#6c7086";
   const pad = { paddingLeft:`${8+depth*12}px` };
   if (node.is_dir) return (
     <div>
-      <button onClick={()=>setOpen(!openState)} style={pad} className="flex items-center gap-1 w-full hover:bg-[#313244] py-0.5 text-sm rounded text-[#cdd6f4]">
-        {openState ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}
-        {openState ? <FolderOpen size={13} color="#89b4fa"/> : <Folder size={13} color="#89b4fa"/>}
+      <button onClick={()=>setIsOpen(!isOpen)} style={pad} className="flex items-center gap-1 w-full hover:bg-[#313244] py-0.5 text-sm rounded text-[#cdd6f4]">
+        {isOpen ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}
+        {isOpen ? <FolderOpen size={13} color="#89b4fa"/> : <Folder size={13} color="#89b4fa"/>}
         <span className="truncate">{node.name}</span>
       </button>
-      {openState && node.children.map(c=><TreeNode key={c.path} node={c} depth={depth+1}/>)}
+      {isOpen && node.children.map(c=><TreeNode key={c.path} node={c} depth={depth+1}/>)}
     </div>
   );
   return (
