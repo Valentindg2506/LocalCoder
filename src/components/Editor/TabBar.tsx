@@ -18,13 +18,13 @@ export default function TabBar() {
   const { openTabs, activeFile, setActiveFile, closeTab } = useStore();
 
   if (!openTabs || openTabs.length === 0) {
-    return <div style={{height:38, background:"#0d0d14", borderBottom:"1px solid #1a1a2e"}} className="flex-shrink-0" />;
+    return <div style={{height:38, background:"#0f0f1a", borderBottom:"1px solid #1e1e35"}} className="flex-shrink-0" />;
   }
 
   return (
     <div
       className="flex items-end overflow-x-auto flex-shrink-0"
-      style={{height:38, background:"#0d0d14", borderBottom:"1px solid #1a1a2e"}}
+      style={{height:38, background:"#0f0f1a", borderBottom:"1px solid #1e1e35"}}
     >
       {openTabs.map(tab => {
         const name = tab.split("/").pop() || tab;
@@ -38,9 +38,9 @@ export default function TabBar() {
             onClick={() => setActiveFile(tab)}
             className="group flex items-center gap-1.5 px-3 h-full cursor-pointer transition-all flex-shrink-0 max-w-[200px] relative"
             style={{
-              background: isActive ? "#131320" : "transparent",
+              background: isActive ? "#13131f" : "transparent",
               borderBottom: isActive ? "2px solid #7c3aed" : "2px solid transparent",
-              borderRight: "1px solid #1a1a2e",
+              borderRight: "1px solid #1e1e35",
             }}
           >
             {icon && (
@@ -48,7 +48,7 @@ export default function TabBar() {
             )}
             <span
               className="text-xs truncate"
-              style={{color: isActive ? "#e2e4f0" : "#4a4a6a", fontFamily:"'JetBrains Mono', monospace"}}
+              style={{color: isActive ? "#c7d2fe" : "#4a4a6a", fontFamily:"'JetBrains Mono', monospace"}}
             >
               {name}
             </span>

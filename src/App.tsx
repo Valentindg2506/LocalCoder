@@ -1,19 +1,29 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "./store";
 import Sidebar from "./components/Sidebar/Sidebar";
 import WelcomeScreen from "./components/WelcomeScreen";
 import EditorPanel from "./components/Editor/EditorPanel";
 import TabBar from "./components/Editor/TabBar";
 import StatusBar from "./components/Editor/StatusBar";
+import ChatPanel from "./components/Chat/ChatPanel";
+import { Bot } from "lucide-react";
 
 export default function App() {
-  const { loadSessions, loadModels, loadHardware, activeSession } = useStore();
+  const { loadSessions, loadModels, loadHardware, activeSession, projectPath, loadProjectTree, projectTree } = useStore();
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     loadSessions();
     loadModels();
     loadHardware();
   }, []);
+
+  // Restore persisted project tree
+  useEffect(() => {
+    if (projectPath && projectTree.length === 0) {
+      loadProjectTree(projectPath);
+    }
+  }, [projectPath]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{background:"#13131f", color:"#d4d6f0", fontFamily:"'Inter', system-ui, sans-serif"}}>
@@ -29,8 +39,29 @@ export default function App() {
             </>
           )}
         </div>
+        {activeSession && chatOpen && (
+          <ChatPanel onClose={() => setChatOpen(false)} />
+        )}
       </div>
-      {activeSession && <StatusBar />}
+
+      {/* StatusBar con botón para abrir/cerrar chat */}
+      {activeSession && (
+        <div
+          className="flex items-center justify-between flex-shrink-0 select-none"
+          style={{height:22, background:"#0f0f1a", borderTop:"1px solid #1e1e35"}}
+        >
+          <StatusBar />
+          <button
+            onClick={() => setChatOpen(o => !o)}
+            className="flex items-center gap-1.5 px-3 h-full transition-all"
+            style={{color: chatOpen ? "#818cf8" : "#3a3a5c", borderLeft: "1px solid #1e1e35"}}
+            title="Abrir / cerrar chat IA"
+          >
+            <Bot size={11}/>
+            <span style={{fontSize:10}}>IA</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

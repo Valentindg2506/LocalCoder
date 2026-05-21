@@ -16,29 +16,22 @@ export default function StatusBar() {
 
   return (
     <div
-      className="flex items-center justify-between px-3 flex-shrink-0 select-none"
-      style={{height:22, background:"#0f0f1a", borderTop:"1px solid #1e1e35", fontSize:11, color:"#3a3a5c"}}
+      className="flex items-center gap-4 flex-1 px-3 select-none"
+      style={{fontSize:11, color:"#3a3a5c"}}
     >
-      {/* Left: model indicator */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{background:"#7c3aed"}}/>
-          <span style={{color:"#4a4a7a"}}>{activeSession?.model || "Sin modelo"}</span>
-        </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-1.5 h-1.5 rounded-full" style={{background:"#7c3aed"}}/>
+        <span style={{color:"#4a4a7a"}}>{activeSession?.model || "Sin modelo"}</span>
       </div>
-
-      {/* Right: file info */}
-      <div className="flex items-center gap-4" style={{color:"#3a3a5c"}}>
-        {activeFile && (
-          <>
-            <span style={{color:"#5a5a8a"}}>Ln {cursorLine}, Col {cursorCol}</span>
-            <span>{lines} líneas</span>
-            <span>{chars.toLocaleString()} chars</span>
-            <span>UTF-8</span>
-            <span style={{color:"#6b6b9a", fontWeight:600}}>{lang}</span>
-          </>
-        )}
-      </div>
+      {activeFile && (
+        <>
+          <span style={{color:"#5a5a8a"}}>Ln {cursorLine}, Col {cursorCol}</span>
+          <span>{lines} líneas</span>
+          <span>{chars.toLocaleString()} chars</span>
+          <span>UTF-8</span>
+          <span style={{color:"#6b6b9a", fontWeight:600}}>{lang}</span>
+        </>
+      )}
     </div>
   );
 }
