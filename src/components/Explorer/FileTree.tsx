@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "../../store";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FolderPlus, RotateCcw } from "lucide-react";
@@ -10,11 +10,20 @@ const EXT_COLOR: Record<string, string> = {
   json: "#fcd34d", md: "#94a3b8", sh: "#a3e635", vue: "#4ade80", scss: "#c084fc",
 };
 
-function TreeNode({ node, depth = 0 }: { node: FileNode; depth?: number }) {
+function TreeNode({ node, depth = 0, activeFile }: { node: FileNode; depth?: number; activeFile: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
-  const { setActiveFile, activeFile } = useStore();
+  const { setActiveFile } = useStore();
+  const nodeRef = useRef<HTMLButtonElement>(null);
   const color = EXT_COLOR[node.extension] || "#4a4a6a";
   const pad = { paddingLeft: `${8 + depth * 12}px` };
+  const isActive = activeFile === node.path;
+
+  // Auto-scroll into view when this node becomes active
+  useEffect(() => {
+    if (isActive && nodeRef.current) {
+      nodeRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isActive]);
 
   if (node.is_dir) return (
     <div>
@@ -33,15 +42,15 @@ function TreeNode({ node, depth = 0 }: { node: FileNode; depth?: number }) {
       </button>
       {isOpen && (
         <div style={{ borderLeft: "1px solid #1e1e35", marginLeft: `${8 + depth * 12 + 5}px` }}>
-          {node.children.map(c => <TreeNode key={c.path} node={c} depth={depth + 1} />)}
+          {node.children.map(c => <TreeNode key={c.path} node={c} depth={depth + 1} activeFile={activeFile} />)}
         </div>
       )}
     </div>
   );
 
-  const isActive = activeFile === node.path;
   return (
     <button
+      ref={nodeRef}
       onClick={() => setActiveFile(node.path)}
       style={{ ...pad, background: isActive ? "#1e1e35" : undefined, borderLeft: isActive ? "2px solid #7c3aed" : "2px solid transparent" }}
       className="group flex items-center gap-1.5 w-full py-[3px] pr-2 text-xs transition-all hover:bg-white/5"
@@ -53,17 +62,14 @@ function TreeNode({ node, depth = 0 }: { node: FileNode; depth?: number }) {
 }
 
 export default function FileExplorer() {
-  const { projectPath, projectTree, loadProjectTree } = useStore();
+  const { projectPath, projectTree, loadProjectTree, activeFile } = useStore();
 
   const openFolder = async () => {
     const selected = await open({ directory: true, multiple: false, title: "Abrir proyecto" });
     if (typeof selected === "string") await loadProjectTree(selected);
   };
 
-  const refresh = () => {
-    if (projectPath) loadProjectTree(projectPath);
-  };
-
+  const refresh = () => { if (projectPath) loadProjectTree(projectPath); };
   const folderName = projectPath ? projectPath.split("/").pop() : null;
 
   return (
@@ -71,8 +77,7 @@ export default function FileExplorer() {
       <div className="flex items-center justify-between px-3 py-1.5 flex-shrink-0" style={{ borderBottom: "1px solid #1e1e35" }}>
         {folderName
           ? <span className="text-[10px] font-mono truncate max-w-[120px]" style={{ color: "#4a4a6a" }}>{folderName}</span>
-          : <span className="text-[10px]" style={{ color: "#2e2e4a" }}>Sin carpeta</span>
-        }
+          : <span className="text-[10px]" style={{ color: "#2e2e4a" }}>Sin carpeta</span>}
         <div className="flex items-center gap-1">
           {projectPath && (
             <button onClick={refresh} title="Refrescar" style={{ color: "#4a4a6a" }} className="hover:opacity-100 opacity-50 transition-opacity p-0.5 rounded">
@@ -95,7 +100,7 @@ export default function FileExplorer() {
           </div>
         ) : (
           <div className="py-0.5">
-            {projectTree.map(n => <TreeNode key={n.path} node={n} />)}
+            {projectTree.map(n => <TreeNode key={n.path} node={n} activeFile={activeFile} />)}
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ fn main() {
             db::get_sessions, db::create_session, db::delete_session,
             db::get_messages, db::add_message,
             ollama::list_models, ollama::chat_stream, ollama::pull_model,
+            ollama::complete_code,
             scanner::list_directory, scanner::read_file, scanner::write_file,
             scanner::analyze_project_chunks,
             hardware::get_hardware_info, hardware::get_recommended_models,

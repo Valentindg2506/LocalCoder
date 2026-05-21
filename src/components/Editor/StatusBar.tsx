@@ -8,7 +8,7 @@ const LANG_LABEL: Record<string, string> = {
 };
 
 export default function StatusBar() {
-  const { activeFile, fileContent, activeSession, cursorLine, cursorCol, projectChunks, isIndexing } = useStore();
+  const { activeFile, fileContent, activeSession, cursorLine, cursorCol, projectChunks, isIndexing, aiCompleting } = useStore();
   const ext = activeFile?.split(".").pop()?.toLowerCase() || "";
   const lang = LANG_LABEL[ext] || "Texto";
   const lines = fileContent ? fileContent.split("\n").length : 0;
@@ -29,12 +29,14 @@ export default function StatusBar() {
           <span style={{ color: "#6b6b9a", fontWeight: 600 }}>{lang}</span>
         </>
       )}
-      {/* Project index indicator */}
-      {isIndexing && (
-        <span className="ml-auto animate-pulse" style={{ color: "#818cf8" }}>⟳ indexando...</span>
+      {aiCompleting && (
+        <span className="animate-pulse" style={{ color: "#818cf8" }}>⚡ IA...</span>
       )}
-      {!isIndexing && projectChunks.length > 0 && (
-        <span className="ml-auto" style={{ color: "#3a5a3a" }}>⬡ {projectChunks.length} chunks</span>
+      {!aiCompleting && isIndexing && (
+        <span className="animate-pulse" style={{ color: "#818cf8" }}>⟳ indexando...</span>
+      )}
+      {!aiCompleting && !isIndexing && projectChunks.length > 0 && (
+        <span style={{ color: "#3a5a3a" }}>⬡ {projectChunks.length} chunks</span>
       )}
     </div>
   );

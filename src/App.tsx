@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useStore } from "./store";
 import Sidebar from "./components/Sidebar/Sidebar";
 import WelcomeScreen from "./components/WelcomeScreen";
@@ -18,10 +18,22 @@ export default function App() {
     loadHardware();
   }, []);
 
-  // Restore project tree once on mount if path is persisted
   useEffect(() => {
     if (projectPath) loadProjectTree(projectPath);
-  }, []); // intentionally empty — only on mount
+  }, []); // only on mount
+
+  // Ctrl+I — toggle chat
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+      e.preventDefault();
+      if (activeSession) setChatOpen(o => !o);
+    }
+  }, [activeSession]);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <div
@@ -31,18 +43,9 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          {!activeSession ? (
-            <WelcomeScreen />
-          ) : (
-            <>
-              <TabBar />
-              <EditorPanel />
-            </>
-          )}
+          {!activeSession ? <WelcomeScreen /> : (<><TabBar /><EditorPanel /></>)}
         </div>
-        {activeSession && chatOpen && (
-          <ChatPanel onClose={() => setChatOpen(false)} />
-        )}
+        {activeSession && chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
       </div>
 
       {activeSession && (
@@ -55,7 +58,7 @@ export default function App() {
             onClick={() => setChatOpen(o => !o)}
             className="flex items-center gap-1.5 px-3 h-full transition-all flex-shrink-0"
             style={{ color: chatOpen ? "#818cf8" : "#3a3a5c", borderLeft: "1px solid #1e1e35" }}
-            title="Abrir / cerrar chat IA (Ctrl+I)"
+            title="Chat IA (Ctrl+I)"
           >
             <Bot size={11} />
             <span style={{ fontSize: 10 }}>IA</span>

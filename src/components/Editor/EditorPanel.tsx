@@ -1,7 +1,8 @@
-import Editor from "@monaco-editor/react";
+import Editor, { type OnMount } from "@monaco-editor/react";
 import { useStore } from "../../store";
 import { FileCode } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 const LANG_MAP: Record<string, string> = {
   php: "php", js: "javascript", ts: "typescript", tsx: "typescriptreact", jsx: "javascriptreact",
@@ -11,7 +12,9 @@ const LANG_MAP: Record<string, string> = {
 };
 
 export default function EditorPanel() {
-  const { activeFile, fileContent, setFileContent, saveFile, setCursor, markUnsaved, markSaved, unsavedFiles } = useStore();
+  const { activeFile, fileContent, setFileContent, saveFile, setCursor, markUnsaved, markSaved, unsavedFiles, activeSession, setAiCompleting } = useStore();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionDisposableRef = useRef<any>(null);
 
   const ext = activeFile?.split(".").pop()?.toLowerCase() || "";
   const lang = LANG_MAP[ext] || "plaintext";
@@ -22,6 +25,107 @@ export default function EditorPanel() {
     await saveFile();
     if (activeFile) markSaved(activeFile);
   }, [saveFile, activeFile, markSaved]);
+
+  const handleMount: OnMount = (editor, monaco) => {
+    // --- Keybindings ---
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
+    editor.onDidChangeCursorPosition(e => setCursor(e.position.lineNumber, e.position.column));
+
+    // --- Theme ---
+    monaco.editor.defineTheme("lc", {
+      base: "vs-dark", inherit: true,
+      rules: [
+        { token: "", foreground: "c8cce8" },
+        { token: "comment", foreground: "3a3a60", fontStyle: "italic" },
+        { token: "keyword", foreground: "a78bfa", fontStyle: "bold" },
+        { token: "string", foreground: "6ee7b7" },
+        { token: "number", foreground: "fb923c" },
+        { token: "type", foreground: "7dd3fc" },
+        { token: "function", foreground: "93c5fd" },
+        { token: "variable.predefined", foreground: "f472b6" },
+        { token: "tag", foreground: "f87171" },
+        { token: "attribute.name", foreground: "a5b4fc" },
+        { token: "attribute.value", foreground: "6ee7b7" },
+      ],
+      colors: {
+        "editor.background": "#13131f", "editor.foreground": "#c8cce8",
+        "editorLineNumber.foreground": "#252540", "editorLineNumber.activeForeground": "#5a5a8a",
+        "editor.lineHighlightBackground": "#17172a", "editor.lineHighlightBorderColor": "#1e1e35",
+        "editorCursor.foreground": "#818cf8", "editor.selectionBackground": "#2d2b5580",
+        "editorIndentGuide.background1": "#1e1e35", "editorIndentGuide.activeBackground1": "#2e2e50",
+        "editorBracketMatch.background": "#7c3aed25", "editorBracketMatch.border": "#7c3aed",
+        "editorGutter.background": "#13131f",
+        "scrollbarSlider.background": "#1e1e3580", "scrollbarSlider.hoverBackground": "#2e2e5080",
+        "editorWidget.background": "#17172a", "editorWidget.border": "#1e1e35",
+        "input.background": "#0f0f1a", "input.foreground": "#c8cce8",
+        "list.hoverBackground": "#17172a",
+        "list.activeSelectionBackground": "#1e1e35", "list.activeSelectionForeground": "#c7d2fe",
+        "focusBorder": "#7c3aed",
+        // Ghost text (inline completion) color
+        "editorGhostText.foreground": "#4a4a7a",
+      }
+    });
+    monaco.editor.setTheme("lc");
+
+    // --- AI Inline Completions ---
+    if (completionDisposableRef.current) completionDisposableRef.current.dispose();
+
+    completionDisposableRef.current = monaco.languages.registerInlineCompletionsProvider(
+      { pattern: "**" },  // all files
+      {
+        provideInlineCompletions: async (model, position) => {
+          const fullText = model.getValue();
+          const offset = model.getOffsetAt(position);
+          const prefix = fullText.slice(0, offset);
+          const suffix = fullText.slice(offset);
+
+          // Don’t trigger on whitespace-only prefix change
+          const lastLine = prefix.split("\n").pop() || "";
+          if (lastLine.trim().length < 2) return { items: [] };
+
+          // Debounce: cancel previous pending request
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+
+          return new Promise(resolve => {
+            debounceRef.current = setTimeout(async () => {
+              try {
+                const modelName = activeSession?.model || "llama3.1:8b";
+                setAiCompleting(true);
+                const completion = await invoke<string>("complete_code", {
+                  model: modelName,
+                  prefix,
+                  suffix,
+                  language: lang,
+                });
+                setAiCompleting(false);
+
+                if (!completion || completion.trim().length === 0) {
+                  resolve({ items: [] });
+                  return;
+                }
+
+                resolve({
+                  items: [{
+                    insertText: completion,
+                    range: {
+                      startLineNumber: position.lineNumber,
+                      startColumn: position.column,
+                      endLineNumber: position.lineNumber,
+                      endColumn: position.column,
+                    },
+                  }],
+                });
+              } catch {
+                setAiCompleting(false);
+                resolve({ items: [] });
+              }
+            }, 420); // 420ms debounce
+          });
+        },
+        freeInlineCompletions: () => {},
+      }
+    );
+  };
 
   if (!activeFile) return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{ background: "#13131f" }}>
@@ -35,7 +139,6 @@ export default function EditorPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "#13131f" }}>
-      {/* Breadcrumb */}
       <div className="flex items-center justify-between px-4 py-1 flex-shrink-0" style={{ background: "#13131f", borderBottom: "1px solid #1e1e35" }}>
         <div className="flex items-center gap-1 text-xs font-mono min-w-0 overflow-hidden">
           {activeFile.split("/").slice(-3, -1).map((part, i) => (
@@ -63,59 +166,8 @@ export default function EditorPanel() {
         <Editor
           value={fileContent}
           language={lang}
-          onChange={v => {
-            setFileContent(v || "");
-            if (activeFile) markUnsaved(activeFile);
-          }}
-          onMount={(editor, monaco) => {
-            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
-            editor.onDidChangeCursorPosition(e => {
-              setCursor(e.position.lineNumber, e.position.column);
-            });
-            monaco.editor.defineTheme("lc", {
-              base: "vs-dark",
-              inherit: true,
-              rules: [
-                { token: "", foreground: "c8cce8" },
-                { token: "comment", foreground: "3a3a60", fontStyle: "italic" },
-                { token: "keyword", foreground: "a78bfa", fontStyle: "bold" },
-                { token: "string", foreground: "6ee7b7" },
-                { token: "number", foreground: "fb923c" },
-                { token: "type", foreground: "7dd3fc" },
-                { token: "function", foreground: "93c5fd" },
-                { token: "variable.predefined", foreground: "f472b6" },
-                { token: "tag", foreground: "f87171" },
-                { token: "attribute.name", foreground: "a5b4fc" },
-                { token: "attribute.value", foreground: "6ee7b7" },
-              ],
-              colors: {
-                "editor.background": "#13131f",
-                "editor.foreground": "#c8cce8",
-                "editorLineNumber.foreground": "#252540",
-                "editorLineNumber.activeForeground": "#5a5a8a",
-                "editor.lineHighlightBackground": "#17172a",
-                "editor.lineHighlightBorderColor": "#1e1e35",
-                "editorCursor.foreground": "#818cf8",
-                "editor.selectionBackground": "#2d2b5580",
-                "editorIndentGuide.background1": "#1e1e35",
-                "editorIndentGuide.activeBackground1": "#2e2e50",
-                "editorBracketMatch.background": "#7c3aed25",
-                "editorBracketMatch.border": "#7c3aed",
-                "editorGutter.background": "#13131f",
-                "scrollbarSlider.background": "#1e1e3580",
-                "scrollbarSlider.hoverBackground": "#2e2e5080",
-                "editorWidget.background": "#17172a",
-                "editorWidget.border": "#1e1e35",
-                "input.background": "#0f0f1a",
-                "input.foreground": "#c8cce8",
-                "list.hoverBackground": "#17172a",
-                "list.activeSelectionBackground": "#1e1e35",
-                "list.activeSelectionForeground": "#c7d2fe",
-                "focusBorder": "#7c3aed",
-              }
-            });
-            monaco.editor.setTheme("lc");
-          }}
+          onChange={v => { setFileContent(v || ""); if (activeFile) markUnsaved(activeFile); }}
+          onMount={handleMount}
           options={{
             fontSize: 13.5,
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
@@ -135,6 +187,9 @@ export default function EditorPanel() {
             tabSize: 2,
             insertSpaces: true,
             formatOnPaste: true,
+            // Inline completions
+            inlineSuggest: { enabled: true, mode: "prefix" },
+            suggest: { preview: true },
           }}
         />
       </div>
