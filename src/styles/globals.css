@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #1e1e2e; color: #cdd6f4; overflow: hidden; }
+.scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #313244; border-radius: 2px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #45475a; }
+.prose-invert code { background: #313244; padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+.prose-invert pre { background: #181825 !important; border-radius: 8px; padding: 12px; overflow-x: auto; }
+.prose-invert pre code { background: transparent; padding: 0; }
