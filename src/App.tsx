@@ -1,25 +1,36 @@
 import { useEffect } from "react";
 import { useStore } from "./store";
-import Sidebar from "./components/Sidebar/Sidebar";
-import EditorPanel from "./components/Editor/EditorPanel";
-import ChatPanel from "./components/Chat/ChatPanel";
-import Topbar from "./components/Sidebar/Topbar";
+import FileExplorer from "./components/Explorer/FileTree";
 import WelcomeScreen from "./components/WelcomeScreen";
+import SessionList from "./components/SessionList";
+import ChatView from "./components/ChatView";
 
 export default function App() {
-  const { loadModels, loadHardware, loadSessions, activeSession } = useStore();
-  useEffect(() => { loadModels(); loadHardware(); loadSessions(); }, []);
+  const { loadSessions, loadModels, loadHardware, activeSession } = useStore();
+
+  useEffect(() => {
+    loadSessions();
+    loadModels();
+    loadHardware();
+  }, []);
+
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e2e] text-[#cdd6f4] overflow-hidden">
-      <Topbar />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        {activeSession ? (
-          <div className="flex flex-1 overflow-hidden">
-            <EditorPanel />
-            <ChatPanel />
-          </div>
-        ) : <WelcomeScreen />}
+    <div className="flex h-screen bg-[#1e1e2e] text-[#cdd6f4] overflow-hidden font-sans">
+      {/* Sidebar */}
+      <div className="w-52 flex-shrink-0 flex flex-col border-r border-[#181825] bg-[#181825]">
+        {/* Sessions */}
+        <div className="flex-shrink-0 border-b border-[#1e1e2e]">
+          <SessionList />
+        </div>
+        {/* File explorer */}
+        <div className="flex-1 overflow-hidden">
+          <FileExplorer />
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {activeSession ? <ChatView /> : <WelcomeScreen />}
       </div>
     </div>
   );
