@@ -9,6 +9,8 @@ use std::sync::Mutex;
 fn main() {
     let conn = db::init_db();
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState { db: Mutex::new(DbConn { conn }) })
         .invoke_handler(tauri::generate_handler![
             db::get_sessions, db::create_session, db::delete_session,
