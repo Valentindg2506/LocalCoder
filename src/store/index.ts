@@ -1,14 +1,13 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Session, Message, OllamaModel, HardwareInfo, FileNode } from "../types";
+import type { Session, Message, OllamaModel, HardwareInfo, FileNode, AnalysisChunk } from "../types";
 
 const PROJECT_KEY = "lc_project";
 const SESSION_KEY = "lc_session_id";
 const TABS_KEY = "lc_tabs";
 const ACTIVE_FILE_KEY = "lc_active_file";
 
-// Safe localStorage reads (guards against Tauri WebView timing issues)
 function lsGet(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
@@ -31,6 +30,9 @@ interface AppStore {
   unsavedFiles: Set<string>;
   projectPath: string | null;
   projectTree: FileNode[];
+  projectChunks: string[];          // indexed code chunks
+  isIndexing: boolean;              // project scan in progress
+  indexProgress: number;            // chunks processed so far
   isStreaming: boolean;
   streamBuffer: string;
   openTabs: string[];
@@ -42,6 +44,7 @@ interface AppStore {
   setActiveSession: (s: Session) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
+  indexProject: () => Promise<void>;  // NEW
   loadModels: () => Promise<void>;
   loadHardware: () => Promise<void>;
   setActiveFile: (path: string) => Promise<void>;
@@ -68,6 +71,9 @@ export const useStore = create<AppStore>((set, get) => ({
   unsavedFiles: new Set(),
   projectPath: lsGet(PROJECT_KEY),
   projectTree: [],
+  projectChunks: [],
+  isIndexing: false,
+  indexProgress: 0,
   isStreaming: false,
   streamBuffer: "",
   openTabs: [],
@@ -86,7 +92,6 @@ export const useStore = create<AppStore>((set, get) => ({
         messages = await invoke<Message[]>("get_messages", { sessionId: found.id });
       }
     }
-    // Restore open tabs and active file
     const savedTabs = lsGet(TABS_KEY);
     const savedFile = lsGet(ACTIVE_FILE_KEY);
     const openTabs: string[] = savedTabs ? JSON.parse(savedTabs) : [];
@@ -96,10 +101,7 @@ export const useStore = create<AppStore>((set, get) => ({
       try {
         fileContent = await invoke<string>("read_file", { path: savedFile });
         activeFile = savedFile;
-      } catch {
-        // file may have been deleted/moved
-        lsDel(ACTIVE_FILE_KEY);
-      }
+      } catch { lsDel(ACTIVE_FILE_KEY); }
     }
     set({ sessions, activeSession, messages, openTabs, activeFile, fileContent });
   },
@@ -128,7 +130,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   sendMessage: async (content) => {
-    const { activeSession, messages } = get();
+    const { activeSession, messages, projectPath, activeFile, projectChunks } = get();
     if (!activeSession) return;
     const userMsg = await invoke<Message>("add_message", { sessionId: activeSession.id, role: "user", content });
     set(s => ({ messages: [...s.messages, userMsg], isStreaming: true, streamBuffer: "" }));
@@ -139,7 +141,37 @@ export const useStore = create<AppStore>((set, get) => ({
       const assistantMsg = await invoke<Message>("add_message", { sessionId: activeSession.id, role: "assistant", content: e.payload });
       set(s => ({ messages: [...s.messages, assistantMsg], isStreaming: false, streamBuffer: "" }));
     });
-    invoke("chat_stream", { model: activeSession.model, messages: chatMessages, sessionId: activeSession.id });
+    invoke("chat_stream", {
+      model: activeSession.model,
+      messages: chatMessages,
+      sessionId: activeSession.id,
+      projectPath: projectPath ?? null,
+      activeFile: activeFile ?? null,
+      projectChunks,
+    });
+  },
+
+  indexProject: async () => {
+    const { projectPath } = get();
+    if (!projectPath) return;
+    set({ isIndexing: true, indexProgress: 0, projectChunks: [] });
+    const chunks: string[] = [];
+    const ul1 = await listen<AnalysisChunk>("analysis_chunk", e => {
+      const { file_path, content, start_line, end_line } = e.payload;
+      const fileName = file_path.split("/").pop() || file_path;
+      chunks.push(`// ${fileName} (líneas ${start_line}-${end_line})\n${content}`);
+      set(s => ({ indexProgress: s.indexProgress + 1 }));
+    });
+    const ul2 = await listen<number>("analysis_complete", () => {
+      ul1(); ul2();
+      set({ isIndexing: false, projectChunks: chunks });
+    });
+    try {
+      await invoke("analyze_project_chunks", { path: projectPath });
+    } catch {
+      ul1(); ul2();
+      set({ isIndexing: false });
+    }
   },
 
   loadModels: async () => {
@@ -174,8 +206,7 @@ export const useStore = create<AppStore>((set, get) => ({
         ? (tabs.length > 0 ? tabs[tabs.length - 1] : null)
         : s.activeFile;
       lsSet(TABS_KEY, JSON.stringify(tabs));
-      if (newActive) lsSet(ACTIVE_FILE_KEY, newActive);
-      else lsDel(ACTIVE_FILE_KEY);
+      if (newActive) lsSet(ACTIVE_FILE_KEY, newActive); else lsDel(ACTIVE_FILE_KEY);
       const unsaved = new Set(s.unsavedFiles);
       unsaved.delete(path);
       return { openTabs: tabs, activeFile: newActive, unsavedFiles: unsaved };
@@ -191,14 +222,10 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   setFileContent: c => set({ fileContent: c }),
-
   markUnsaved: (path) => set(s => { const u = new Set(s.unsavedFiles); u.add(path); return { unsavedFiles: u }; }),
   markSaved: (path) => set(s => { const u = new Set(s.unsavedFiles); u.delete(path); return { unsavedFiles: u }; }),
 
-  setProjectPath: (p) => {
-    lsSet(PROJECT_KEY, p);
-    set({ projectPath: p });
-  },
+  setProjectPath: (p) => { lsSet(PROJECT_KEY, p); set({ projectPath: p }); },
 
   loadProjectTree: async (path) => {
     const nodes = await invoke<FileNode[]>("list_directory", { path });
@@ -207,6 +234,5 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   setCursor: (line, col) => set({ cursorLine: line, cursorCol: col }),
-
   appendStream: token => set(s => ({ streamBuffer: s.streamBuffer + token })),
 }));
