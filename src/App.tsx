@@ -2,8 +2,8 @@ import { useEffect } from "react";
 import { useStore } from "./store";
 import FileExplorer from "./components/Explorer/FileTree";
 import WelcomeScreen from "./components/WelcomeScreen";
-import SessionList from "./components/SessionList";
-import ChatView from "./components/ChatView";
+import Sidebar from "./components/Sidebar/Sidebar";
+import ChatPanel from "./components/Chat/ChatPanel";
 
 export default function App() {
   const { loadSessions, loadModels, loadHardware, activeSession } = useStore();
@@ -18,11 +18,9 @@ export default function App() {
     <div className="flex h-screen bg-[#1e1e2e] text-[#cdd6f4] overflow-hidden font-sans">
       {/* Sidebar */}
       <div className="w-52 flex-shrink-0 flex flex-col border-r border-[#181825] bg-[#181825]">
-        {/* Sessions */}
         <div className="flex-shrink-0 border-b border-[#1e1e2e]">
-          <SessionList />
+          <Sidebar />
         </div>
-        {/* File explorer */}
         <div className="flex-1 overflow-hidden">
           <FileExplorer />
         </div>
@@ -30,7 +28,7 @@ export default function App() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {activeSession ? <ChatView /> : <WelcomeScreen />}
+        {activeSession ? <ChatPanel /> : <WelcomeScreen />}
       </div>
     </div>
   );
