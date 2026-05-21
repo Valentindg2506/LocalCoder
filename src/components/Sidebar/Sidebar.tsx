@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useStore } from "../../store";
-import { MessageSquare, Trash2, Plus, ChevronDown, ChevronRight, Zap } from "lucide-react";
+import { MessageSquare, Trash2, Plus, ChevronDown, ChevronRight, Zap, Search, Settings, GitBranch, FolderTree } from "lucide-react";
 import FileExplorer from "../Explorer/FileTree";
+import SearchPanel from "../Search/SearchPanel";
+import SettingsPanel from "../Settings/SettingsPanel";
+
+type SideView = "explorer" | "search" | "settings";
 
 export default function Sidebar() {
-  const { sessions, activeSession, setActiveSession, deleteSession, createSession, models } = useStore();
+  const { sessions, activeSession, setActiveSession, deleteSession, createSession, models, gitBranch, gitChanges, settings } = useStore();
   const [sessionsOpen, setSessionsOpen] = useState(true);
-  const [explorerOpen, setExplorerOpen] = useState(true);
+  const [sideView, setSideView] = useState<SideView>("explorer");
 
   return (
     <div
@@ -36,7 +40,7 @@ export default function Sidebar() {
           {sessionsOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           <span className="text-[10px] font-semibold uppercase tracking-widest">Sesiones</span>
           <button
-            onClick={e => { e.stopPropagation(); createSession("Nueva sesión", undefined, models[0]?.name || "llama3.1:8b"); }}
+            onClick={e => { e.stopPropagation(); createSession("Nueva sesión", undefined, models[0]?.name || settings.defaultModel); }}
             className="ml-auto p-0.5 rounded hover:opacity-100 opacity-50 transition-opacity"
             style={{ color: "#818cf8" }}
             title="Nueva sesión"
@@ -44,7 +48,6 @@ export default function Sidebar() {
             <Plus size={11} />
           </button>
         </button>
-
         {sessionsOpen && (
           <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
             {sessions.length === 0 && (
@@ -77,21 +80,41 @@ export default function Sidebar() {
 
       <div style={{ height: 1, background: "#1e1e35", margin: "2px 12px" }} />
 
-      {/* Explorer */}
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <button
-          onClick={() => setExplorerOpen(o => !o)}
-          className="flex items-center gap-1.5 w-full px-3 py-1.5 flex-shrink-0 transition-colors hover:bg-white/5"
-          style={{ color: "#3a3a5c" }}
-        >
-          {explorerOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-          <span className="text-[10px] font-semibold uppercase tracking-widest">Explorador</span>
-        </button>
-        {explorerOpen && (
-          <div className="flex-1 overflow-hidden">
-            <FileExplorer />
-          </div>
-        )}
+      {/* View switcher tabs */}
+      <div className="flex items-center gap-0.5 px-2 py-1 flex-shrink-0" style={{ borderBottom: "1px solid #1e1e35" }}>
+        {([
+          { id: "explorer", icon: <FolderTree size={11} />, title: "Explorador" },
+          { id: "search",   icon: <Search size={11} />,     title: "Buscar (Ctrl+Shift+F)" },
+          { id: "settings", icon: <Settings size={11} />,   title: "Configuración" },
+        ] as { id: SideView; icon: React.ReactNode; title: string }[]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setSideView(tab.id)}
+            title={tab.title}
+            className="flex-1 flex items-center justify-center py-1 rounded transition-all"
+            style={{ color: sideView === tab.id ? "#818cf8" : "#3a3a5c", background: sideView === tab.id ? "#1e1e35" : "transparent" }}
+          >
+            {tab.icon}
+          </button>
+        ))}
+      </div>
+
+      {/* Git branch badge (only in explorer) */}
+      {sideView === "explorer" && gitBranch && (
+        <div className="flex items-center gap-1.5 px-3 py-1 flex-shrink-0" style={{ borderBottom: "1px solid #1e1e35" }}>
+          <GitBranch size={10} style={{ color: "#818cf8", flexShrink: 0 }} />
+          <span className="text-[10px] font-mono truncate" style={{ color: "#818cf8" }}>{gitBranch}</span>
+          {gitChanges.length > 0 && (
+            <span className="ml-auto text-[9px] px-1 rounded" style={{ background: "#2a1a0f", color: "#fb923c" }}>{gitChanges.length}</span>
+          )}
+        </div>
+      )}
+
+      {/* Panel area */}
+      <div className="flex-1 overflow-hidden">
+        {sideView === "explorer" && <FileExplorer />}
+        {sideView === "search" && <SearchPanel />}
+        {sideView === "settings" && <SettingsPanel />}
       </div>
     </div>
   );

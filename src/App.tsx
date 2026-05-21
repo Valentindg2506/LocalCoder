@@ -9,7 +9,7 @@ import ChatPanel from "./components/Chat/ChatPanel";
 import { Bot } from "lucide-react";
 
 export default function App() {
-  const { loadSessions, loadModels, loadHardware, activeSession, projectPath, loadProjectTree } = useStore();
+  const { loadSessions, loadModels, loadHardware, activeSession, projectPath, loadProjectTree, setSideView } = useStore() as any;
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
@@ -20,9 +20,10 @@ export default function App() {
 
   useEffect(() => {
     if (projectPath) loadProjectTree(projectPath);
-  }, []); // only on mount
+  }, []);
 
   // Ctrl+I — toggle chat
+  // Ctrl+Shift+F — open search
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "i") {
       e.preventDefault();

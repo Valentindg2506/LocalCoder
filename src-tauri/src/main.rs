@@ -19,6 +19,8 @@ fn main() {
             ollama::complete_code,
             scanner::list_directory, scanner::read_file, scanner::write_file,
             scanner::analyze_project_chunks,
+            scanner::search_in_project,
+            scanner::git_status, scanner::git_branch,
             hardware::get_hardware_info, hardware::get_recommended_models,
         ])
         .run(tauri::generate_context!())

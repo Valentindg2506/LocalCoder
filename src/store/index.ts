@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Session, Message, OllamaModel, HardwareInfo, FileNode, AnalysisChunk } from "../types";
+import type { Session, Message, OllamaModel, HardwareInfo, FileNode, AnalysisChunk, SearchMatch, Settings } from "../types";
+import { DEFAULT_SETTINGS } from "../types";
 
 const PROJECT_KEY = "lc_project";
 const SESSION_KEY = "lc_session_id";
 const TABS_KEY = "lc_tabs";
 const ACTIVE_FILE_KEY = "lc_active_file";
+const SETTINGS_KEY = "lc_settings";
 
 function lsGet(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -16,6 +18,14 @@ function lsSet(key: string, val: string) {
 }
 function lsDel(key: string) {
   try { localStorage.removeItem(key); } catch {}
+}
+
+function loadSettings(): Settings {
+  try {
+    const raw = lsGet(SETTINGS_KEY);
+    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {}
+  return { ...DEFAULT_SETTINGS };
 }
 
 interface AppStore {
@@ -38,7 +48,17 @@ interface AppStore {
   openTabs: string[];
   cursorLine: number;
   cursorCol: number;
-  aiCompleting: boolean;   // inline completion in progress
+  aiCompleting: boolean;
+  // Search
+  searchQuery: string;
+  searchResults: SearchMatch[];
+  searchLoading: boolean;
+  searchCaseSensitive: boolean;
+  // Git
+  gitBranch: string | null;
+  gitChanges: string[];
+  // Settings
+  settings: Settings;
 
   loadSessions: () => Promise<void>;
   createSession: (name: string, projectPath?: string, model?: string) => Promise<Session>;
@@ -59,6 +79,13 @@ interface AppStore {
   setCursor: (line: number, col: number) => void;
   appendStream: (token: string) => void;
   setAiCompleting: (v: boolean) => void;
+  // Search actions
+  runSearch: (query: string, caseSensitive?: boolean) => Promise<void>;
+  clearSearch: () => void;
+  // Git actions
+  refreshGit: () => Promise<void>;
+  // Settings actions
+  updateSettings: (patch: Partial<Settings>) => void;
 }
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -69,6 +96,9 @@ export const useStore = create<AppStore>((set, get) => ({
   isStreaming: false, streamBuffer: "",
   openTabs: [], cursorLine: 1, cursorCol: 1,
   aiCompleting: false,
+  searchQuery: "", searchResults: [], searchLoading: false, searchCaseSensitive: false,
+  gitBranch: null, gitChanges: [],
+  settings: loadSettings(),
 
   loadSessions: async () => {
     const sessions = await invoke<Session[]>("get_sessions");
@@ -90,8 +120,9 @@ export const useStore = create<AppStore>((set, get) => ({
     set({ sessions, activeSession, messages, openTabs, activeFile, fileContent });
   },
 
-  createSession: async (name, projectPath, model = "llama3.1:8b") => {
-    const session = await invoke<Session>("create_session", { name, projectPath, model });
+  createSession: async (name, projectPath, model) => {
+    const modelName = model || get().settings.defaultModel;
+    const session = await invoke<Session>("create_session", { name, projectPath, model: modelName });
     lsSet(SESSION_KEY, session.id);
     set(s => ({ sessions: [session, ...s.sessions], activeSession: session, messages: [], openTabs: [], activeFile: null, fileContent: "" }));
     return session;
@@ -192,9 +223,47 @@ export const useStore = create<AppStore>((set, get) => ({
   loadProjectTree: async (path) => {
     const nodes = await invoke<FileNode[]>("list_directory", { path });
     lsSet(PROJECT_KEY, path); set({ projectTree: nodes, projectPath: path });
+    // Refresh git when loading tree
+    get().refreshGit();
   },
 
   setCursor: (line, col) => set({ cursorLine: line, cursorCol: col }),
   appendStream: token => set(s => ({ streamBuffer: s.streamBuffer + token })),
   setAiCompleting: (v) => set({ aiCompleting: v }),
+
+  runSearch: async (query, caseSensitive = false) => {
+    const { projectPath } = get();
+    if (!projectPath || !query.trim()) { set({ searchResults: [], searchQuery: query }); return; }
+    set({ searchLoading: true, searchQuery: query, searchCaseSensitive: caseSensitive });
+    try {
+      const results = await invoke<SearchMatch[]>("search_in_project", {
+        path: projectPath, query, caseSensitive, maxResults: 500,
+      });
+      set({ searchResults: results, searchLoading: false });
+    } catch { set({ searchLoading: false }); }
+  },
+
+  clearSearch: () => set({ searchQuery: "", searchResults: [] }),
+
+  refreshGit: async () => {
+    const { projectPath } = get();
+    if (!projectPath) return;
+    try {
+      const [branch, changes] = await Promise.all([
+        invoke<string>("git_branch", { path: projectPath }),
+        invoke<string[]>("git_status", { path: projectPath }),
+      ]);
+      set({ gitBranch: branch || null, gitChanges: changes });
+    } catch {
+      set({ gitBranch: null, gitChanges: [] });
+    }
+  },
+
+  updateSettings: (patch) => {
+    set(s => {
+      const next = { ...s.settings, ...patch };
+      lsSet(SETTINGS_KEY, JSON.stringify(next));
+      return { settings: next };
+    });
+  },
 }));

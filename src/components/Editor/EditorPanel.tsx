@@ -16,16 +16,16 @@ export default function EditorPanel() {
   const {
     activeFile, fileContent, setFileContent, saveFile,
     setCursor, markUnsaved, markSaved, unsavedFiles,
-    setAiCompleting,
+    setAiCompleting, settings,
   } = store;
 
-  // Keep a ref to the latest store snapshot so the Monaco provider
-  // never closes over a stale activeSession or lang value
   const storeRef = useRef(store);
   useEffect(() => { storeRef.current = store; });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completionDisposableRef = useRef<any>(null);
+  const editorRef = useRef<any>(null);
 
   const ext = activeFile?.split(".").pop()?.toLowerCase() || "";
   const lang = LANG_MAP[ext] || "plaintext";
@@ -37,18 +37,35 @@ export default function EditorPanel() {
     if (activeFile) markSaved(activeFile);
   }, [saveFile, activeFile, markSaved]);
 
-  // Dispose inline provider and cancel debounce when file changes
+  // Cleanup on file change
   useEffect(() => {
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-        setAiCompleting(false);
-      }
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; setAiCompleting(false); }
+      if (autoSaveRef.current) { clearTimeout(autoSaveRef.current); autoSaveRef.current = null; }
     };
   }, [activeFile]);
 
+  // Auto-save
+  useEffect(() => {
+    if (!settings.autoSave || !isUnsaved || !activeFile) return;
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => { handleSave(); }, settings.autoSaveDelay);
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [fileContent, settings.autoSave, settings.autoSaveDelay]);
+
+  // Update editor options live when settings change
+  useEffect(() => {
+    if (!editorRef.current) return;
+    editorRef.current.updateOptions({
+      fontSize: settings.fontSize,
+      tabSize: settings.tabSize,
+      wordWrap: settings.wordWrap ? "on" : "off",
+      inlineSuggest: { enabled: settings.aiCompletionsEnabled },
+    });
+  }, [settings.fontSize, settings.tabSize, settings.wordWrap, settings.aiCompletionsEnabled]);
+
   const handleMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
     editor.onDidChangeCursorPosition(e => setCursor(e.position.lineNumber, e.position.column));
 
@@ -86,66 +103,36 @@ export default function EditorPanel() {
     });
     monaco.editor.setTheme("lc");
 
-    // Dispose previous provider before registering a new one
-    if (completionDisposableRef.current) {
-      completionDisposableRef.current.dispose();
-      completionDisposableRef.current = null;
-    }
+    if (completionDisposableRef.current) { completionDisposableRef.current.dispose(); completionDisposableRef.current = null; }
 
     completionDisposableRef.current = monaco.languages.registerInlineCompletionsProvider(
       { pattern: "**" },
       {
         provideInlineCompletions: async (model, position) => {
+          if (!storeRef.current.settings.aiCompletionsEnabled) return { items: [] };
           const fullText = model.getValue();
           const offset = model.getOffsetAt(position);
           const prefix = fullText.slice(0, offset);
           const suffix = fullText.slice(offset);
-
           const lastLine = prefix.split("\n").pop() || "";
           if (lastLine.trim().length < 2) return { items: [] };
-
-          // Cancel pending debounce
           if (debounceRef.current) clearTimeout(debounceRef.current);
-
           return new Promise(resolve => {
             debounceRef.current = setTimeout(async () => {
               debounceRef.current = null;
               try {
-                // Read from ref — always up-to-date, no stale closure
                 const { activeSession } = storeRef.current;
                 const currentLang = storeRef.current.activeFile?.split(".").pop()?.toLowerCase() || "";
                 const langId = LANG_MAP[currentLang] || "plaintext";
-                const modelName = activeSession?.model || "llama3.1:8b";
-
+                const modelName = activeSession?.model || storeRef.current.settings.defaultModel;
                 storeRef.current.setAiCompleting(true);
-                const completion = await invoke<string>("complete_code", {
-                  model: modelName,
-                  prefix,
-                  suffix,
-                  language: langId,
-                });
+                const completion = await invoke<string>("complete_code", { model: modelName, prefix, suffix, language: langId });
                 storeRef.current.setAiCompleting(false);
-
-                if (!completion || completion.trim().length === 0) {
-                  resolve({ items: [] });
-                  return;
-                }
-
+                if (!completion || completion.trim().length === 0) { resolve({ items: [] }); return; }
                 resolve({
-                  items: [{
-                    insertText: completion,
-                    range: {
-                      startLineNumber: position.lineNumber,
-                      startColumn: position.column,
-                      endLineNumber: position.lineNumber,
-                      endColumn: position.column,
-                    },
-                  }],
+                  items: [{ insertText: completion, range: { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column } }],
                 });
-              } catch {
-                storeRef.current.setAiCompleting(false);
-                resolve({ items: [] });
-              }
+              } catch { storeRef.current.setAiCompleting(false); resolve({ items: [] }); }
             }, 420);
           });
         },
@@ -195,13 +182,13 @@ export default function EditorPanel() {
           onChange={v => { setFileContent(v || ""); if (activeFile) markUnsaved(activeFile); }}
           onMount={handleMount}
           options={{
-            fontSize: 13.5,
+            fontSize: settings.fontSize,
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
             fontLigatures: true,
             minimap: { enabled: true, scale: 1 },
             scrollBeyondLastLine: false,
             automaticLayout: true,
-            wordWrap: "off",
+            wordWrap: settings.wordWrap ? "on" : "off",
             lineNumbers: "on",
             renderLineHighlight: "all",
             bracketPairColorization: { enabled: true },
@@ -210,10 +197,10 @@ export default function EditorPanel() {
             cursorSmoothCaretAnimation: "on",
             cursorBlinking: "smooth",
             guides: { indentation: true, bracketPairs: true },
-            tabSize: 2,
+            tabSize: settings.tabSize,
             insertSpaces: true,
             formatOnPaste: true,
-            inlineSuggest: { enabled: true, mode: "prefix" },
+            inlineSuggest: { enabled: settings.aiCompletionsEnabled, mode: "prefix" },
             suggest: { preview: true },
           }}
         />

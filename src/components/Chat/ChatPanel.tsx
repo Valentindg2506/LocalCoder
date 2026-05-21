@@ -1,19 +1,33 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "../../store";
-import { Send, Bot, User, Loader2, X, FolderSearch, CheckCircle } from "lucide-react";
+import { Send, Bot, User, Loader2, X, FolderSearch, CheckCircle, ClipboardPaste } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { invoke } from "@tauri-apps/api/core";
 
 interface Props { onClose: () => void; }
 
 const MAX_CONTEXT_CHARS = 4000;
+
+// Extract fenced code blocks from markdown text
+function extractCodeBlocks(text: string): { lang: string; code: string }[] {
+  const regex = /```([\w]*)\n([\s\S]*?)```/g;
+  const blocks: { lang: string; code: string }[] = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    blocks.push({ lang: match[1] || "text", code: match[2] });
+  }
+  return blocks;
+}
 
 export default function ChatPanel({ onClose }: Props) {
   const {
     messages, sendMessage, isStreaming, streamBuffer,
     activeSession, fileContent, activeFile,
     projectChunks, isIndexing, indexProgress, indexProject, projectPath,
+    setFileContent, markUnsaved, saveFile, markSaved,
   } = useStore();
   const [input, setInput] = useState("");
+  const [applyTarget, setApplyTarget] = useState<string | null>(null); // msgId being applied
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +63,17 @@ export default function ChatPanel({ onClose }: Props) {
     setInput(prompts[action] || action);
   };
 
+  // Apply a code block to the active file
+  const applyCode = useCallback(async (code: string, msgId: string) => {
+    if (!activeFile) return;
+    setApplyTarget(msgId);
+    setFileContent(code);
+    markUnsaved(activeFile);
+    await saveFile();
+    markSaved(activeFile);
+    setTimeout(() => setApplyTarget(null), 1500);
+  }, [activeFile, setFileContent, markUnsaved, saveFile, markSaved]);
+
   const projectIndexed = projectChunks.length > 0;
 
   return (
@@ -67,7 +92,7 @@ export default function ChatPanel({ onClose }: Props) {
         )}
         {projectIndexed && (
           <span className="text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1" style={{ background: "#0f2a0f", color: "#86efac", border: "1px solid #1a3a1a" }}>
-            <CheckCircle size={8} /> {projectChunks.length} chunks
+            <CheckCircle size={8} /> {projectChunks.length}
           </span>
         )}
         <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: "#1e1e35", color: "#818cf8" }}>
@@ -97,11 +122,9 @@ export default function ChatPanel({ onClose }: Props) {
                 style={{ color: projectIndexed ? "#86efac" : "#818cf8" }}
               >
                 <FolderSearch size={11} />
-                {projectIndexed ? `Proyecto indexado (${projectChunks.length})` : "Indexar proyecto"}
+                {projectIndexed ? `Indexado (${projectChunks.length})` : "Indexar proyecto"}
               </button>
-              {projectIndexed && (
-                <span className="ml-auto text-[9px]" style={{ color: "#2e2e4a" }}>contexto activo</span>
-              )}
+              {projectIndexed && <span className="ml-auto text-[9px]" style={{ color: "#2e2e4a" }}>ctx activo</span>}
             </>
           )}
         </div>
@@ -114,28 +137,49 @@ export default function ChatPanel({ onClose }: Props) {
             <Bot size={32} style={{ color: "#1e1e35" }} />
             <p className="text-xs text-center" style={{ color: "#3a3a5c" }}>
               IA 100% local.<br />
-              {projectPath
-                ? <>Indexa el proyecto para<br />dar contexto completo a la IA.</>  
-                : <>Abre un proyecto para<br />activar el contexto completo.</>}
+              {projectPath ? <>Indexa el proyecto para<br />dar contexto completo.</> : <>Abre un proyecto para<br />activar el contexto.</>}
             </p>
           </div>
         )}
-        {messages.map(msg => (
-          <div key={msg.id} className={"flex gap-2 " + (msg.role === "user" ? "flex-row-reverse" : "")}>
-            <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: msg.role === "user" ? "#7c3aed" : "#1e1e35" }}>
-              {msg.role === "user"
-                ? <User size={10} color="#fff" />
-                : <Bot size={10} style={{ color: "#818cf8" }} />}
+
+        {messages.map(msg => {
+          const codeBlocks = msg.role === "assistant" ? extractCodeBlocks(msg.content) : [];
+          return (
+            <div key={msg.id} className={"flex gap-2 " + (msg.role === "user" ? "flex-row-reverse" : "")}>
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: msg.role === "user" ? "#7c3aed" : "#1e1e35" }}>
+                {msg.role === "user" ? <User size={10} color="#fff" /> : <Bot size={10} style={{ color: "#818cf8" }} />}
+              </div>
+              <div className="max-w-[85%] rounded-lg px-3 py-2 text-xs prose prose-invert prose-xs max-w-none"
+                style={msg.role === "user"
+                  ? { background: "#1e1e35", color: "#c7d2fe" }
+                  : { background: "#17172a", color: "#c8cce8", border: "1px solid #1e1e35" }}>
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                {/* Apply code buttons */}
+                {codeBlocks.length > 0 && activeFile && (
+                  <div className="flex flex-wrap gap-1 mt-1.5 pt-1.5" style={{ borderTop: "1px solid #1e1e35" }}>
+                    {codeBlocks.map((block, i) => (
+                      <button
+                        key={i}
+                        onClick={() => applyCode(block.code, msg.id + i)}
+                        className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded transition-all"
+                        style={{
+                          background: applyTarget === msg.id + i ? "#0f2a0f" : "#1e1e35",
+                          color: applyTarget === msg.id + i ? "#86efac" : "#4a4a6a",
+                          border: `1px solid ${applyTarget === msg.id + i ? "#1a4a1a" : "#2e2e4a"}`,
+                        }}
+                      >
+                        <ClipboardPaste size={8} />
+                        {applyTarget === msg.id + i ? "¡Aplicado!" : `Aplicar ${block.lang || "código"}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="max-w-[85%] rounded-lg px-3 py-2 text-xs prose prose-invert prose-xs max-w-none"
-              style={msg.role === "user"
-                ? { background: "#1e1e35", color: "#c7d2fe" }
-                : { background: "#17172a", color: "#c8cce8", border: "1px solid #1e1e35" }}>
-              <ReactMarkdown>{msg.content}</ReactMarkdown>
-            </div>
-          </div>
-        ))}
+          );
+        })}
+
         {isStreaming && streamBuffer && (
           <div className="flex gap-2">
             <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#1e1e35" }}>
