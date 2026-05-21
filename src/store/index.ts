@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Session, Message, OllamaModel, HardwareInfo, FileNode } from "../types";
 
-const STORAGE_KEY = "lc_project";
+const PROJECT_KEY = "lc_project";
+const SESSION_KEY = "lc_session_id";
 
 interface AppStore {
   sessions: Session[];
@@ -18,6 +19,8 @@ interface AppStore {
   isStreaming: boolean;
   streamBuffer: string;
   openTabs: string[];
+  cursorLine: number;
+  cursorCol: number;
 
   loadSessions: () => Promise<void>;
   createSession: (name: string, projectPath?: string, model?: string) => Promise<Session>;
@@ -32,11 +35,12 @@ interface AppStore {
   setFileContent: (c: string) => void;
   setProjectPath: (p: string) => void;
   loadProjectTree: (path: string) => Promise<void>;
+  setCursor: (line: number, col: number) => void;
   appendStream: (token: string) => void;
 }
 
-// Restore persisted project path
-const savedProject = localStorage.getItem(STORAGE_KEY);
+const savedProject = localStorage.getItem(PROJECT_KEY);
+const savedSessionId = localStorage.getItem(SESSION_KEY);
 
 export const useStore = create<AppStore>((set, get) => ({
   sessions: [], activeSession: null, messages: [], models: [],
@@ -45,22 +49,39 @@ export const useStore = create<AppStore>((set, get) => ({
   projectTree: [],
   isStreaming: false, streamBuffer: "",
   openTabs: [],
+  cursorLine: 1, cursorCol: 1,
 
-  loadSessions: async () => set({ sessions: await invoke<Session[]>("get_sessions") }),
+  loadSessions: async () => {
+    const sessions = await invoke<Session[]>("get_sessions");
+    // Restore last active session
+    let activeSession: Session | null = null;
+    let messages: Message[] = [];
+    if (savedSessionId) {
+      const found = sessions.find(s => s.id === savedSessionId);
+      if (found) {
+        activeSession = found;
+        messages = await invoke<Message[]>("get_messages", { sessionId: found.id });
+      }
+    }
+    set({ sessions, activeSession, messages });
+  },
 
   createSession: async (name, projectPath, model = "llama3.1:8b") => {
     const session = await invoke<Session>("create_session", { name, projectPath, model });
+    localStorage.setItem(SESSION_KEY, session.id);
     set(s => ({ sessions: [session, ...s.sessions], activeSession: session, messages: [] }));
     return session;
   },
 
   setActiveSession: async (session) => {
     const messages = await invoke<Message[]>("get_messages", { sessionId: session.id });
+    localStorage.setItem(SESSION_KEY, session.id);
     set({ activeSession: session, messages });
   },
 
   deleteSession: async (id) => {
     await invoke("delete_session", { id });
+    if (localStorage.getItem(SESSION_KEY) === id) localStorage.removeItem(SESSION_KEY);
     set(s => ({
       sessions: s.sessions.filter(x => x.id !== id),
       activeSession: s.activeSession?.id === id ? null : s.activeSession,
@@ -96,6 +117,7 @@ export const useStore = create<AppStore>((set, get) => ({
       activeFile: path,
       fileContent: content,
       openTabs: s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path],
+      cursorLine: 1, cursorCol: 1,
     }));
   },
 
@@ -117,15 +139,17 @@ export const useStore = create<AppStore>((set, get) => ({
   setFileContent: c => set({ fileContent: c }),
 
   setProjectPath: (p) => {
-    localStorage.setItem(STORAGE_KEY, p);
+    localStorage.setItem(PROJECT_KEY, p);
     set({ projectPath: p });
   },
 
   loadProjectTree: async (path) => {
     const nodes = await invoke<FileNode[]>("list_directory", { path });
     set({ projectTree: nodes, projectPath: path });
-    localStorage.setItem(STORAGE_KEY, path);
+    localStorage.setItem(PROJECT_KEY, path);
   },
+
+  setCursor: (line, col) => set({ cursorLine: line, cursorCol: col }),
 
   appendStream: token => set(s => ({ streamBuffer: s.streamBuffer + token })),
 }));

@@ -11,7 +11,7 @@ const LANG_MAP: Record<string,string> = {
 };
 
 export default function EditorPanel() {
-  const { activeFile, fileContent, setFileContent, saveFile } = useStore();
+  const { activeFile, fileContent, setFileContent, saveFile, setCursor } = useStore();
   const [unsaved, setUnsaved] = useState(false);
 
   const ext = activeFile?.split(".").pop()?.toLowerCase() || "";
@@ -37,7 +37,6 @@ export default function EditorPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{background:"#13131f"}}>
-      {/* Breadcrumb bar */}
       <div className="flex items-center justify-between px-4 py-1 flex-shrink-0" style={{background:"#13131f", borderBottom:"1px solid #1e1e35"}}>
         <div className="flex items-center gap-1 text-xs font-mono min-w-0 overflow-hidden">
           {activeFile.split("/").slice(-3, -1).map((part, i) => (
@@ -54,9 +53,7 @@ export default function EditorPanel() {
           <button
             onClick={handleSave}
             className="text-xs px-2.5 py-0.5 rounded font-medium transition-all"
-            style={unsaved
-              ? {background:"#7c3aed", color:"#fff"}
-              : {background:"#1e1e35", color:"#4a4a6a"}}
+            style={unsaved ? {background:"#7c3aed", color:"#fff"} : {background:"#1e1e35", color:"#4a4a6a"}}
           >
             Guardar
           </button>
@@ -70,6 +67,10 @@ export default function EditorPanel() {
           onChange={v => { setFileContent(v || ""); setUnsaved(true); }}
           onMount={(editor, monaco) => {
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, handleSave);
+            // Track cursor position → store → StatusBar
+            editor.onDidChangeCursorPosition(e => {
+              setCursor(e.position.lineNumber, e.position.column);
+            });
             monaco.editor.defineTheme("lc", {
               base: "vs-dark",
               inherit: true,

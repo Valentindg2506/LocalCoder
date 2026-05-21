@@ -36,10 +36,10 @@ export default function Sidebar() {
           {sessionsOpen ? <ChevronDown size={10}/> : <ChevronRight size={10}/>}
           <span className="text-[10px] font-semibold uppercase tracking-widest">Sesiones</span>
           <button
-            onClick={e => { e.stopPropagation(); createSession("Nueva sesi\u00f3n", undefined, models[0]?.name || "llama3.1:8b"); }}
+            onClick={e => { e.stopPropagation(); createSession("Nueva sesión", undefined, models[0]?.name || "llama3.1:8b"); }}
             className="ml-auto p-0.5 rounded hover:opacity-100 opacity-50 transition-opacity"
             style={{color:"#818cf8"}}
-            title="Nueva sesi\u00f3n"
+            title="Nueva sesión"
           >
             <Plus size={11}/>
           </button>
