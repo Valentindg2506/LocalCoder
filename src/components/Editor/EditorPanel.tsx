@@ -29,7 +29,7 @@ export default function EditorPanel() {
     <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{background:"#13131f"}}>
       <FileCode size={52} style={{color:"#2a2a45"}}/>
       <div className="text-center">
-        <p className="text-sm" style={{color:"#4a4a6a"}}>Ning\u00fan archivo abierto</p>
+        <p className="text-sm" style={{color:"#4a4a6a"}}>Ningún archivo abierto</p>
         <p className="text-xs mt-1" style={{color:"#2e2e4a"}}>Selecciona un archivo del explorador</p>
       </div>
     </div>
