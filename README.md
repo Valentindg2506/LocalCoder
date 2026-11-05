@@ -1,46 +1,31 @@
 # LocalCoder
 
-IDE ligero con IA 100% local usando Ollama. Sin nube, sin límites.
+IDE ligero de escritorio con un asistente de **inteligencia artificial que se ejecuta al 100 % en tu equipo**. Sin nube, sin telemetría y sin límites de uso.
 
-## Requisitos
+## La idea
 
-- [Rust](https://rustup.rs/) (stable)
-- [Node.js 18+](https://nodejs.org/)
-- [Ollama](https://ollama.com/) corriendo en localhost:11434
+Los asistentes de código más conocidos envían tu código a servidores externos y tienen límites o suscripciones. LocalCoder junta en una sola aplicación un editor de código y un chat con modelos de lenguaje que corren en local a través de **Ollama**, de modo que el código nunca sale del ordenador y la IA funciona incluso sin conexión.
 
-## Instalar dependencias del sistema (Ubuntu 24/26)
+## Qué ofrece
 
-```bash
-sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-  libayatana-appindicator3-dev librsvg2-dev build-essential libssl-dev libgtk-3-dev
-```
+- **Editor Monaco**, el mismo motor de edición que Visual Studio Code.
+- **Chat con IA en streaming**: las respuestas aparecen en tiempo real mientras el modelo las genera.
+- **Memoria por sesión**: las conversaciones se guardan en una base de datos SQLite local, en el propio equipo.
+- **Explorador de archivos** sin límite de profundidad para moverse por proyectos grandes.
+- **Análisis de proyectos completos**, recorriendo el código línea por línea.
+- **Escáner de hardware y recomendador de modelos**: revisa la máquina y sugiere qué modelos de Ollama puede mover con soltura.
+- **Totalmente offline**: ni telemetría ni dependencias de servicios externos.
 
-## Instalar y correr
+## Cómo está hecho
 
-```bash
-npm install
-npm run tauri dev
-```
+Es una aplicación de escritorio construida con **Tauri**: la interfaz está hecha con **TypeScript**, **Vite** y **Tailwind CSS**, y la parte nativa con **Rust**, lo que da una aplicación ligera que consume mucho menos que un IDE tradicional basado en Electron. La IA la aporta **Ollama**, con modelos como Qwen 2.5 Coder o Llama 3.1.
 
-## Build para producción
+| Carpeta | Contenido |
+|---|---|
+| `src/` | Interfaz de la aplicación. |
+| `src-tauri/` | Parte nativa en Rust. |
 
-```bash
-npm run tauri build
-```
+## Autor
 
-## Modelos recomendados para empezar
-
-```bash
-ollama pull qwen2.5-coder:7b
-ollama pull llama3.1:8b
-```
-
-## Características
-
-- Editor Monaco (mismo que VS Code)
-- Chat con IA streaming en tiempo real
-- Memoria por sesión (SQLite local en ~/.localcoder/)
-- Explorador de archivos sin límite de profundidad
-- Análisis de proyectos completos línea por línea
-- Scanner de hardware + recomendador de modelos Ollama
-- 100% offline, sin telemetría, sin nube
+**Valentín Antonio De Gennaro** · Estudiante de 2.º de DAM en Valencia
+[valentindg.com](https://valentindg.com) · [Portafolio](https://portafolio.valentindg.com) · [LinkedIn](https://www.linkedin.com/in/valentindg)
